@@ -257,25 +257,25 @@ def _init_colors():
 # ─── 绘制工具 ────────────────────────────────────────────
 
 def _safe_addstr(win, y, x, text, attr=0):
-    """安全添加字符串，忽略越界错误"""
+    """安全添加字符串，忽略越界错误。
+
+    对每个字符单独指定绝对 x 坐标绘制，规避 windows_curses (PDCurses) 在
+    渲染宽字符（汉字）时光标只推进 1 列而非 2 列的 bug。
+    """
     try:
         h, w = win.getmaxyx()
         if y < 0 or y >= h or x < 0 or x >= w:
             return
-        # 裁剪到屏幕宽度
-        available = w - x - 1
-        if available <= 0:
-            return
-        # 按显示宽度裁剪
-        result = []
-        cur_w = 0
+        cur_x = x
         for c in text:
             cw = _char_width(c)
-            if cur_w + cw > available:
+            if cur_x + cw > w - 1:
                 break
-            result.append(c)
-            cur_w += cw
-        win.addstr(y, x, "".join(result), attr)
+            try:
+                win.addstr(y, cur_x, c, attr)
+            except curses.error:
+                pass
+            cur_x += cw  # 手动推进：宽字符+2，窄字符+1
     except curses.error:
         pass
 
