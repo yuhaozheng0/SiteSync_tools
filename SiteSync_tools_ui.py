@@ -323,10 +323,10 @@ def draw_header(stdscr, task_name: str):
     """绘制顶部标题栏"""
     h, w = stdscr.getmaxyx()
     title = f"  SiteSync Tools  │  Task: {task_name}  "
-    stdscr.attron(curses.color_pair(COLOR_TITLE))
-    stdscr.addstr(0, 0, " " * w)
-    _safe_addstr(stdscr, 0, 0, title, curses.color_pair(COLOR_TITLE))
-    stdscr.attroff(curses.color_pair(COLOR_TITLE))
+    attr  = curses.color_pair(COLOR_TITLE)
+    # 先用 _safe_addstr 填满整行空格（统一走逐字符路径，避免 attron/addstr 混搭）
+    _safe_addstr(stdscr, 0, 0, " " * (w - 1), attr)
+    _safe_addstr(stdscr, 0, 0, title, attr)
 
 
 def draw_footer(stdscr, hints: list[tuple[str, str]]):
@@ -415,16 +415,18 @@ def input_box(stdscr, prompt: str, default: str = "") -> str | None:
     input_x = 2
 
     popup = curses.newwin(box_h, box_w, by, bx)
-    draw_box(popup, 0, 0, box_h, box_w)
-    _safe_addstr(popup, 1, 2, _truncate_str(prompt, box_w - 4), curses.color_pair(COLOR_WARN))
-    popup.refresh()
 
     val    = list(default)
     cursor = len(val)
 
     while True:
+        # ── 每轮完整重绘 popup（避免 newwin 宽字符缓冲区不一致问题）
+        popup.erase()
+        draw_box(popup, 0, 0, box_h, box_w)
+        _safe_addstr(popup, 1, 2, _truncate_str(prompt, box_w - 4),
+                     curses.color_pair(COLOR_WARN))
+
         # ── 计算显示窗口（以光标为中心，保证光标可见）
-        # 从 cursor 向左尽量多放，再向右填满
         show_indices: list[int] = []
         w_used = 0
         for i in range(cursor - 1, -1, -1):
@@ -444,7 +446,8 @@ def input_box(stdscr, prompt: str, default: str = "") -> str | None:
         disp_str     = "".join(val[i] for i in show_indices)
         cur_x        = input_x + _str_width("".join(val[scroll_start:cursor]))
 
-        popup.addstr(input_y, input_x, " " * avail)
+        _safe_addstr(popup, input_y, input_x, " " * avail,
+                     curses.color_pair(COLOR_MENU))
         _safe_addstr(popup, input_y, input_x, disp_str,
                      curses.color_pair(COLOR_MENU) | curses.A_UNDERLINE)
         try:
