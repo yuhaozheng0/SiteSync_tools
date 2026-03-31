@@ -265,8 +265,8 @@ def _init_colors():
 def _safe_addstr(win, y, x, text, attr=0):
     """安全添加字符串，忽略越界错误。
 
-    对每个字符单独指定绝对 x 坐标绘制，规避 windows_curses (PDCurses) 在
-    渲染宽字符（汉字）时光标只推进 1 列而非 2 列的 bug。
+    对每个字符单独指定绝对 x 坐标绘制，用 getyx() 读取实际光标推进量，
+    规避 windows_curses (PDCurses) 宽字符光标推进不一致的 bug。
     """
     try:
         h, w = win.getmaxyx()
@@ -279,9 +279,11 @@ def _safe_addstr(win, y, x, text, attr=0):
                 break
             try:
                 win.addstr(y, cur_x, c, attr)
+                _, actual_x = win.getyx()
+                # getyx 返回的实际位置比写入前更可靠；若光标没前进则至少+1
+                cur_x = actual_x if actual_x > cur_x else cur_x + 1
             except curses.error:
-                pass
-            cur_x += cw  # 手动推进：宽字符+2，窄字符+1
+                cur_x += cw
     except curses.error:
         pass
 
@@ -1828,6 +1830,16 @@ class SiteSyncUI:
 
     def run(self, stdscr):
         """主循环"""
+        # PDCurses initscr() 会把控制台代码页重置为系统默认（GBK 936）。
+        # 在 wrapper() 回调内（initscr 已执行后）再次设置为 UTF-8，确保
+        # PDCurses 的宽字符输出与控制台代码页一致。
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                ctypes.windll.kernel32.SetConsoleOutputCP(65001)
+                ctypes.windll.kernel32.SetConsoleCP(65001)
+            except Exception:
+                pass
         curses.curs_set(0)
         stdscr.keypad(True)
         _init_colors()
@@ -1928,7 +1940,9 @@ def main():
             import ctypes
             ctypes.windll.kernel32.SetConsoleOutputCP(65001)
             ctypes.windll.kernel32.SetConsoleCP(65001)
-            ctypes.cdll.msvcrt.setlocale(0, ".UTF-8")   # LC_ALL=0，C 运行时切到 UTF-8
+            # 注意：不在这里调 msvcrt.setlocale(".UTF-8")。
+            # PDCurses initscr() 会重置控制台代码页，setlocale 在 initscr 前设置无效。
+            # 真正的 UTF-8 设置在 SiteSyncUI.run()（wrapper 回调内，initscr 后）执行。
         except Exception:
             pass
         if hasattr(sys.stdout, "reconfigure"):
