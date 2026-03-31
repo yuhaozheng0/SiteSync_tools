@@ -336,22 +336,20 @@ def draw_footer(stdscr, hints: list[tuple[str, str]]):
     for i, (key, desc) in enumerate(hints):
         if x >= w - 2:
             break
-        try:
-            # 格式：描述[按键]，组间一个空格，用 _str_width 计算中文宽度
-            if desc:
-                stdscr.addstr(h-1, x, desc, curses.color_pair(COLOR_TITLE))
-                x += _str_width(desc)
-            stdscr.addstr(h-1, x, "[", curses.color_pair(COLOR_TITLE))
+        # 格式：描述[按键]，组间一个空格
+        # 全部走 _safe_addstr（逐字符绝对定位），避免 windows_curses 宽字符光标偏移
+        if desc:
+            _safe_addstr(stdscr, h-1, x, desc, curses.color_pair(COLOR_TITLE))
+            x += _str_width(desc)
+        _safe_addstr(stdscr, h-1, x, "[", curses.color_pair(COLOR_TITLE))
+        x += 1
+        _safe_addstr(stdscr, h-1, x, key, curses.color_pair(COLOR_TITLE) | curses.A_BOLD)
+        x += _str_width(key)
+        _safe_addstr(stdscr, h-1, x, "]", curses.color_pair(COLOR_TITLE))
+        x += 1
+        if i < len(hints) - 1:
+            _safe_addstr(stdscr, h-1, x, " ", curses.color_pair(COLOR_TITLE))
             x += 1
-            stdscr.addstr(h-1, x, key, curses.color_pair(COLOR_TITLE) | curses.A_BOLD)
-            x += _str_width(key)
-            stdscr.addstr(h-1, x, "]", curses.color_pair(COLOR_TITLE))
-            x += 1
-            if i < len(hints) - 1:
-                stdscr.addstr(h-1, x, " ", curses.color_pair(COLOR_TITLE))
-                x += 1
-        except curses.error:
-            break
 
 
 def draw_menu(stdscr, items: list[dict], selected: int, start_y: int, start_x: int, inner_w: int):
