@@ -81,6 +81,12 @@ def _soft_wrap_lines(text: str, width: int) -> list[str]:
     return result
 
 
+def _ljust(s: str, width: int) -> str:
+    """按显示宽度左对齐填充空格（替代 f'{s:<width}'，正确处理汉字双宽）"""
+    pad = width - _str_width(s)
+    return s + " " * max(0, pad)
+
+
 def _truncate_str(s: str, max_width: int, suffix: str = "...") -> str:
     """将字符串截断到 max_width 显示宽度，超出时追加 suffix"""
     if _str_width(s) <= max_width:
@@ -813,22 +819,20 @@ def show_form(stdscr, title: str, fields: list[dict], task_name: str) -> dict | 
 
             if ftype == "toggle":
                 toggle_str = "[是]" if val else "[否]"
-                line = f"{label:<{label_w}}: {toggle_str}"
+                line = f"{_ljust(label, label_w)}: {toggle_str}"
             elif ftype == "button":
                 line = f"  [ {label} ]"
                 attr = (curses.color_pair(COLOR_SELECT) | curses.A_BOLD) if is_sel \
                        else (curses.color_pair(COLOR_SUCCESS) | curses.A_BOLD)
             elif ftype == "dirpath":
-                # 目录路径：用 [目录] 前缀标示，优先显示路径末尾
                 val_disp = _truncate_path_tail(str(val), val_w - 5)
-                line = f"{label:<{label_w}}: [目录] {val_disp}"
+                line = f"{_ljust(label, label_w)}: [目录] {val_disp}"
             elif ftype == "filepath":
-                # 文件路径：用 [文件] 前缀标示，优先显示路径末尾
                 val_disp = _truncate_path_tail(str(val), val_w - 5)
-                line = f"{label:<{label_w}}: [文件] {val_disp}"
+                line = f"{_ljust(label, label_w)}: [文件] {val_disp}"
             else:
                 val_disp = _truncate_str(str(val), val_w)
-                line = f"{label:<{label_w}}: {val_disp}"
+                line = f"{_ljust(label, label_w)}: {val_disp}"
 
             _safe_addstr(stdscr, ry, fx + 2, line, attr)
 
@@ -1177,7 +1181,7 @@ def backup_slot_selector(stdscr, task_name: str) -> str | None:
             backed_at, btype = _slot_meta(slot_dir)
             is_latest = (slot_dir.name == latest_name)
             flag      = " ★" if is_latest else ""
-            line      = f"{slot_dir.name:<42} {backed_at:<16} {btype}{flag}"
+            line      = f"{_ljust(slot_dir.name, 42)} {backed_at:<16} {btype}{flag}"
 
             ry = by + 2 + i
             if si == selected:
@@ -1293,7 +1297,7 @@ def show_backups_table(stdscr, task_name: str):
             return
 
         # 表头
-        header = f"  {'备份槽名称':<42} {'时间':<16} {'类型':<14} {'标记'}"
+        header = f"  {_ljust('备份槽名称', 42)} {_ljust('时间', 16)} {_ljust('类型', 14)} {'标记'}"
         _safe_addstr(stdscr, 1, 0, header, curses.color_pair(COLOR_BORDER) | curses.A_BOLD)
         _safe_addstr(stdscr, 2, 0, "─" * (sw - 1), curses.color_pair(COLOR_BORDER))
 
@@ -1310,7 +1314,7 @@ def show_backups_table(stdscr, task_name: str):
             is_latest = (slot_dir.name == latest_name)
             flag      = "★ latest" if is_latest else ""
 
-            col_name  = f"{slot_dir.name:<42}"
+            col_name  = _ljust(slot_dir.name, 42)
             col_time  = f"{backed_at:<16}"
             col_type  = f"{btype:<14}"
             line      = f"  {col_name} {col_time} {col_type} {flag}"
@@ -1685,7 +1689,7 @@ def do_remove_backups(stdscr, task_name: str):
                 # 左右箭头 + 当前模式标签居中
                 left_arrow  = "◀"
                 right_arrow = "▶"
-                mode_display = f"  {rlabel:<{label_w}}: {left_arrow}  {mode_label}  {right_arrow}"
+                mode_display = f"  {_ljust(rlabel, label_w)}: {left_arrow}  {mode_label}  {right_arrow}"
                 _safe_addstr(stdscr, ry, inner_x, mode_display, bg)
 
             elif rtype == "button":
@@ -1700,7 +1704,7 @@ def do_remove_backups(stdscr, task_name: str):
                     val_str = task_val
                 else:
                     val_str = param_val or ""
-                line = f"  {rlabel:<{label_w}}: {_truncate_path_tail(val_str, inner_w - label_w - 5)}"
+                line = f"  {_ljust(rlabel, label_w)}: {_truncate_path_tail(val_str, inner_w - label_w - 5)}"
                 _safe_addstr(stdscr, ry, inner_x, line, bg)
 
         stdscr.refresh()
