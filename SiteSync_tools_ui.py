@@ -1914,12 +1914,16 @@ def main():
     # Windows: 切换控制台为 UTF-8，并导入 windows-curses（若已安装）
     if sys.platform == "win32":
         # os.system("chcp ...") 只影响子进程，无法改变当前进程的代码页。
-        # 用 ctypes 直接调用 Windows API，将当前进程控制台切换为 UTF-8 (65001)，
-        # 这样 windows_curses (PDCurses) 的 addstr 才能正确输出汉字。
+        # 必须同时修改两处：
+        #   1. Windows 控制台代码页（SetConsoleOutputCP/SetConsoleCP）
+        #   2. C 运行时 locale（msvcrt.setlocale）
+        # PDCurses 的 wctomb() 依赖 C 运行时 locale 做 Unicode→多字节转换，
+        # 若 locale 仍为 GBK，输出 GBK 字节到 UTF-8 控制台就会显示乱码汉字。
         try:
             import ctypes
             ctypes.windll.kernel32.SetConsoleOutputCP(65001)
             ctypes.windll.kernel32.SetConsoleCP(65001)
+            ctypes.cdll.msvcrt.setlocale(0, ".UTF-8")   # LC_ALL=0，C 运行时切到 UTF-8
         except Exception:
             pass
         if hasattr(sys.stdout, "reconfigure"):
