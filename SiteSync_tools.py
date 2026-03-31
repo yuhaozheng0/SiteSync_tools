@@ -81,6 +81,37 @@ def get_backup_dir() -> Path:
 
 
 # ---------------------------------------------------------------------------
+# 备份 latest 指针辅助（跨平台：Unix 用软链接，Windows 用 .txt 文件）
+# ---------------------------------------------------------------------------
+
+def _set_latest(backup_base: Path, task_name: str, slot_dir: Path) -> None:
+    """更新 latest 指针（Unix=软链接，Windows=纯文本文件）"""
+    latest_link = backup_base / f"{task_name}_latest"
+    if latest_link.is_symlink() or (latest_link.exists() and not latest_link.is_dir()):
+        latest_link.unlink()
+    try:
+        latest_link.symlink_to(slot_dir.name)
+    except (OSError, NotImplementedError):
+        # Windows 无开发者模式时不支持软链接，回退为纯文本文件
+        (backup_base / f"{task_name}_latest.txt").write_text(slot_dir.name, encoding="utf-8")
+
+
+def _get_latest(backup_base: Path, task_name: str) -> Path | None:
+    """解析 latest 指针，返回备份槽目录或 None"""
+    latest_link = backup_base / f"{task_name}_latest"
+    if latest_link.is_symlink():
+        target = latest_link.resolve()
+        return target if target.exists() else None
+    # Windows 纯文本文件回退
+    latest_txt = backup_base / f"{task_name}_latest.txt"
+    if latest_txt.exists():
+        slot_name = latest_txt.read_text(encoding="utf-8").strip()
+        candidate = backup_base / slot_name
+        return candidate if candidate.exists() else None
+    return None
+
+
+# ---------------------------------------------------------------------------
 # YAML 辅助
 # ---------------------------------------------------------------------------
 
@@ -740,7 +771,7 @@ def _parse_slot_time(slot_dir: Path) -> datetime.datetime | None:
     meta_path = slot_dir / "backup_meta.json"
     if meta_path.exists():
         try:
-            with open(meta_path) as f:
+            with open(meta_path, encoding="utf-8") as f:
                 meta = json.load(f)
             s = meta.get("backed_up_at", "")
             if s:
@@ -792,12 +823,7 @@ def _auto_backup(task_name: str, config_dir_name: str | None, backup_type: str) 
     with open(slot_dir / "backup_meta.json", "w", encoding="utf-8") as f:
         json.dump(meta, f, ensure_ascii=False, indent=2)
 
-    # 更新 latest 软链接
-    latest_link = backup_base / f"{task_name}_latest"
-    if latest_link.is_symlink() or latest_link.exists():
-        latest_link.unlink()
-    latest_link.symlink_to(slot_dir.name)
-
+    _set_latest(backup_base, task_name, slot_dir)
     return slot_dir
 
 
@@ -843,14 +869,9 @@ def cmd_backup(task_name: str, input_dir: str) -> None:
     with open(slot_dir / "backup_meta.json", "w", encoding="utf-8") as f:
         json.dump(meta, f, ensure_ascii=False, indent=2)
 
-    # 更新 latest 软链接
-    latest_link = backup_base / f"{task_name}_latest"
-    if latest_link.is_symlink() or latest_link.exists():
-        latest_link.unlink()
-    latest_link.symlink_to(slot_dir.name)
-
+    _set_latest(backup_base, task_name, slot_dir)
     print(f"[backup] 完成，备份槽: {slot_dir}")
-    print(f"[backup] latest 指向: {latest_link}")
+    print(f"[backup] latest 指向: {backup_base / (task_name + '_latest')}")
 
 
 # ---------------------------------------------------------------------------
@@ -900,11 +921,10 @@ def cmd_restore(task_name: str, output_dir: str, slot: str = "latest",
     backup_base = get_backup_dir()
 
     if slot == "latest":
-        latest_link = backup_base / f"{task_name}_latest"
-        if not latest_link.exists():
+        slot_dir = _get_latest(backup_base, task_name)
+        if slot_dir is None:
             print(f"[restore] 错误: 未找到 latest 备份，请先运行 backup", file=sys.stderr)
             sys.exit(1)
-        slot_dir = latest_link.resolve()
     else:
         slot_dir = backup_base / slot
         if not slot_dir.exists():
@@ -916,7 +936,7 @@ def cmd_restore(task_name: str, output_dir: str, slot: str = "latest",
     meta_path = slot_dir / "backup_meta.json"
     if meta_path.exists():
         try:
-            with open(meta_path) as f:
+            with open(meta_path, encoding="utf-8") as f:
                 bk_meta = json.load(f)
             backup_type = bk_meta.get("backup_type", "full")
         except Exception:
@@ -1007,15 +1027,15 @@ def cmd_list_backups(task_name: str) -> None:
         return
 
     print(f"[list-backups] 任务 '{task_name}' 的备份列表:")
-    latest_link = backup_base / f"{task_name}_latest"
-    latest_target = latest_link.resolve().name if latest_link.exists() else None
+    _latest = _get_latest(backup_base, task_name)
+    latest_target = _latest.name if _latest else None
 
     for slot_dir in slots:
         meta_path = slot_dir / "backup_meta.json"
         backed_at = ""
         btype = ""
         if meta_path.exists():
-            with open(meta_path) as f:
+            with open(meta_path, encoding="utf-8") as f:
                 meta = json.load(f)
             backed_at = meta.get("backed_up_at", "")
             btype = meta.get("backup_type", "")
@@ -1078,8 +1098,7 @@ def cmd_remove_backups(task_name: str, slot: str | None = None,
         print("[remove-backups] 无符合条件的备份槽")
         return
 
-    latest_link = backup_base / f"{task_name}_latest"
-    latest_target = latest_link.resolve() if latest_link.is_symlink() else None
+    latest_target = _get_latest(backup_base, task_name)
 
     for s in to_remove:
         shutil.rmtree(s)
@@ -1095,12 +1114,14 @@ def cmd_remove_backups(task_name: str, slot: str | None = None,
              and not d.name.endswith("_latest")],
             key=lambda p: p.name,
         )
-        if latest_link.is_symlink():
-            latest_link.unlink()
         if remaining:
-            latest_link.symlink_to(remaining[-1].name)
+            _set_latest(backup_base, task_name, remaining[-1])
             print(f"[remove-backups] latest 已更新为: {remaining[-1].name}")
         else:
+            for p in [backup_base / f"{task_name}_latest",
+                      backup_base / f"{task_name}_latest.txt"]:
+                if p.is_symlink() or p.exists():
+                    p.unlink(missing_ok=True)
             print(f"[remove-backups] 所有备份已删除，latest 链接已移除")
 
 

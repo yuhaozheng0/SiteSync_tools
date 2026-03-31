@@ -97,7 +97,7 @@ def _truncate_str(s: str, max_width: int, suffix: str = "...") -> str:
     return "".join(result) + suffix
 
 
-def _truncate_path_tail(s: str, max_width: int, prefix: str = "…") -> str:
+def _truncate_path_tail(s: str, max_width: int, prefix: str = "...") -> str:
     """路径过长时从末尾保留，头部加 prefix，保证用户看到的是当前位置"""
     if _str_width(s) <= max_width:
         return s
@@ -361,6 +361,13 @@ def draw_menu(stdscr, items: list[dict], selected: int, start_y: int, start_x: i
     selected: 当前选中行的索引
     """
     h, _ = stdscr.getmaxyx()
+    # 固定列宽（显示列数）：[3]arrow [1]key [2]sep [12]label [rest]desc
+    # 各列使用绝对 x 位置绘制，避免 ▶ 等宽度不确定字符影响后续列对齐
+    COL_KEY   = start_x + 3
+    COL_LABEL = start_x + 6    # 3+1+2
+    COL_DESC  = start_x + 18   # 3+1+2+12
+    LABEL_W   = 12
+
     for i, item in enumerate(items):
         y = start_y + i
         if y >= h - 1:
@@ -368,16 +375,23 @@ def draw_menu(stdscr, items: list[dict], selected: int, start_y: int, start_x: i
         key   = item.get("key", "")
         label = item.get("label", "")
         desc  = item.get("desc", "")
-        # 格式：" ▶ 1  Extract    从 task 文件提取 YAML"
-        arrow = " ▶ " if i == selected else "   "
-        line  = f"{arrow}{key}  {label:<12}{desc}"
+
         if i == selected:
             attr = curses.color_pair(COLOR_SELECT) | curses.A_BOLD
+            arrow = " > "
         else:
             attr = curses.color_pair(COLOR_MENU)
+            arrow = "   "
+
         # 清空该行
         stdscr.addstr(y, start_x, " " * inner_w, attr)
-        _safe_addstr(stdscr, y, start_x, line, attr)
+        # 各列独立绘制，固定列位置不受前列字符宽度影响
+        _safe_addstr(stdscr, y, start_x,  arrow, attr)
+        _safe_addstr(stdscr, y, COL_KEY,  key,   attr)
+        _safe_addstr(stdscr, y, COL_LABEL, label, attr)
+        desc_max = inner_w - (COL_DESC - start_x)
+        if desc_max > 0:
+            _safe_addstr(stdscr, y, COL_DESC, _truncate_str(desc, desc_max), attr)
 
 
 # ─── 输入框 ──────────────────────────────────────────────
@@ -1896,6 +1910,19 @@ class SiteSyncUI:
 
 def main():
     import argparse
+
+    # Windows: 切换控制台为 UTF-8，并导入 windows-curses（若已安装）
+    if sys.platform == "win32":
+        os.system("chcp 65001 > nul 2>&1")
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        if hasattr(sys.stderr, "reconfigure"):
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+        try:
+            import windows_curses  # noqa: F401
+        except ImportError:
+            pass
+
     parser = argparse.ArgumentParser(description="SiteSync Tools TUI — 站点配置管理终端界面")
     parser.add_argument("--task", default=DEFAULT_TASK_NAME,
                         help=f"task 名称（默认: {DEFAULT_TASK_NAME}）")
