@@ -195,6 +195,9 @@ def _deep_merge(base, override):
 # 端口/连线相关字段，不参与 extract/apply（修改会破坏连线）
 _PORT_FIELDS = {"func_def"}
 
+# 不追踪到 nodes_overrides.yaml 的字段（端口定义，由程序员维护，非站点差异参数）
+_OVERRIDES_EXCLUDED_FIELDS = {"signature"}
+
 
 def _build_all_nodes(task_data: dict) -> tuple[dict, dict, dict]:
     """从 task_data 构建 all_nodes 字典，同时返回 service 和 robot_scales。"""
@@ -250,7 +253,7 @@ def cmd_extract(task_name: str, output_dir: str) -> None:
         for uid, ov_entry in existing_nodes.items():
             if uid not in all_nodes:
                 continue  # task 中已不存在此节点，跳过
-            tracked_fields = set(ov_entry.get("model", {}).keys())
+            tracked_fields = set(ov_entry.get("model", {}).keys()) - _OVERRIDES_EXCLUDED_FIELDS
             fresh_model = {k: v for k, v in all_nodes[uid]["model"].items()
                            if k in tracked_fields}
             if fresh_model:
@@ -567,6 +570,8 @@ def cmd_update(task_name: str, input_dir: str, output_dir: str) -> None:
         for field, current_val in current_model.items():
             if field not in baseline_model:
                 continue  # 新增字段暂不自动追踪
+            if field in _OVERRIDES_EXCLUDED_FIELDS:
+                continue  # 端口定义等字段不追踪到 overrides
             diff = _deep_diff_minimal(baseline_model[field], current_val)
             if diff is None:
                 continue  # 此字段无变化
