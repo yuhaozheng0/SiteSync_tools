@@ -265,8 +265,9 @@ def _init_colors():
 def _safe_addstr(win, y, x, text, attr=0):
     """安全添加字符串，忽略越界错误。
 
-    对每个字符单独指定绝对 x 坐标绘制，用 getyx() 读取实际光标推进量，
-    规避 windows_curses (PDCurses) 宽字符光标推进不一致的 bug。
+    对每个字符单独指定绝对 x 坐标绘制，规避 windows_curses (PDCurses) 在
+    渲染宽字符（汉字）时光标只推进 1 列而非 2 列的 bug。
+    cur_x 由我们自己按 _char_width 推进（宽字符+2），不依赖 PDCurses 光标。
     """
     try:
         h, w = win.getmaxyx()
@@ -279,11 +280,9 @@ def _safe_addstr(win, y, x, text, attr=0):
                 break
             try:
                 win.addstr(y, cur_x, c, attr)
-                _, actual_x = win.getyx()
-                # getyx 返回的实际位置比写入前更可靠；若光标没前进则至少+1
-                cur_x = actual_x if actual_x > cur_x else cur_x + 1
             except curses.error:
-                cur_x += cw
+                pass
+            cur_x += cw  # 宽字符+2，窄字符+1，绝对定位不依赖 PDCurses 光标
     except curses.error:
         pass
 
