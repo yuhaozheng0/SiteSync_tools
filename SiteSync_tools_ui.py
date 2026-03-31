@@ -1913,7 +1913,15 @@ def main():
 
     # Windows: 切换控制台为 UTF-8，并导入 windows-curses（若已安装）
     if sys.platform == "win32":
-        os.system("chcp 65001 > nul 2>&1")
+        # os.system("chcp ...") 只影响子进程，无法改变当前进程的代码页。
+        # 用 ctypes 直接调用 Windows API，将当前进程控制台切换为 UTF-8 (65001)，
+        # 这样 windows_curses (PDCurses) 的 addstr 才能正确输出汉字。
+        try:
+            import ctypes
+            ctypes.windll.kernel32.SetConsoleOutputCP(65001)
+            ctypes.windll.kernel32.SetConsoleCP(65001)
+        except Exception:
+            pass
         if hasattr(sys.stdout, "reconfigure"):
             sys.stdout.reconfigure(encoding="utf-8", errors="replace")
         if hasattr(sys.stderr, "reconfigure"):
