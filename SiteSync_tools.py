@@ -1134,7 +1134,7 @@ def main() -> None:
         description="SiteSync_tools — 卸车站点配置同步管理工具",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    sub = parser.add_subparsers(dest="cmd", required=True)
+    sub = parser.add_subparsers(dest="cmd")
 
     def _add_task(p):
         p.add_argument("--task", default=DEFAULT_TASK_NAME,
@@ -1206,6 +1206,12 @@ def main() -> None:
                      help="删除超过 N 天的旧备份（默认 7，与 --count/--slot 互斥）")
 
     args = parser.parse_args()
+
+    # 无子命令时启动 TUI
+    if args.cmd is None:
+        from SiteSync_tools_ui import main as ui_main
+        ui_main()
+        return
 
     if args.cmd == "extract":
         out = args.output_dir or default_config_dir(args.task)
