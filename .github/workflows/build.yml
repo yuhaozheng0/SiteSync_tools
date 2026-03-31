@@ -16,7 +16,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install pyinstaller windows-curses
+        run: pip install pyinstaller windows-curses pyyaml
 
       - name: Build EXE
         run: pyinstaller --onefile --console SiteSync_tools_ui.py
