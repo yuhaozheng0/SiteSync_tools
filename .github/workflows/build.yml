@@ -16,10 +16,10 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install pyinstaller windows-curses pyyaml
+        run: pip install pyinstaller "windows-curses>=2.3" pyyaml
 
       - name: Build EXE
-        run: pyinstaller --onefile --console SiteSync_tools_ui.py
+        run: pyinstaller --onefile --console --hidden-import=windows_curses SiteSync_tools_ui.py
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
